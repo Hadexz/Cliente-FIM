@@ -13,7 +13,7 @@ android {
         minSdk = 26 // <--- ESTO ARREGLA LOS ERRORES DE FECHA (Time)
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.6.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
