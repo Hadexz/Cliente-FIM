@@ -8,14 +8,20 @@ import android.graphics.pdf.PdfRenderer
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.annotation.Keep
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -28,6 +34,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,15 +45,18 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LooksOne
 import androidx.compose.material.icons.filled.LooksTwo
@@ -57,6 +67,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WaterDrop
@@ -79,6 +90,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -110,23 +122,25 @@ import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-/** DEFINICION DE COLORES */
-val FimGold = Color(0xFFC5A968)
-val FimDark = Color(0xFF121212)
-val FimSurface = Color(0xFF1E1E1E)
-val FimSurfaceVariant = Color(0xFF2D2D2D)
+/** DEFINICION DE COLORES - PALETA MEJORADA MD3 */
+val FimGold = Color(0xFFD4AF37) // Oro mÃ¡s elegante
+val FimDark = Color(0xFF121212) // Fondo principal
+val FimSurface = Color(0xFF1E1E1E) // Superficie tarjetas
+val FimSurfaceVariant = Color(0xFF2A2A2A) // Variante superficie
+val FimBackground = Color(0xFF0A0A0A) // Fondo mÃ¡s profundo
 
-/** COLORES DE ALTO CONTRASTE */
-val FimRed = Color(0xFFFF1744)
-val FimYellow = Color(0xFFFFD54F)
-val FimGreen = Color(0xFF00E676)
-val FimBlue = Color(0xFF64B5F6)
-val FimPurple = Color(0xFF9575CD)
-val FimTeal = Color(0xFF1DE9B6)
+/** COLORES DE ALTO CONTRASTE SUAVIZADOS */
+val FimRed = Color(0xFFFF5252)
+val FimYellow = Color(0xFFFFD740)
+val FimGreen = Color(0xFF69F0AE)
+val FimBlue = Color(0xFF448AFF)
+val FimPurple = Color(0xFFB388FF)
+val FimTeal = Color(0xFF64FFDA)
+
 
 /** ENUMERACION DE PANTALLAS */
 enum class Pantalla {
-    LOGIN, MENU, CALIFICACIONES_PARCIALES, CALIFICACIONES_DEPTALES, HORARIO, CREDENCIAL, AVANCE, TEMAS_REPORTADOS, CALCULADORA_TERMO, ASISTENCIA_PROFESORES, NOTAS_COMUNIDAD
+    LOGIN, MENU, CALIFICACIONES_PARCIALES, CALIFICACIONES_DEPTALES, HORARIO, CREDENCIAL, AVANCE, TEMAS_REPORTADOS, CALCULADORA_TERMO, ASISTENCIA_PROFESORES, NOTAS_COMUNIDAD, SUGERENCIAS, DETALLE_SUGERENCIA
 }
 
 /** ESTRUCTURA DE MATERIAS POR AÑO (ORDENADO) */
@@ -173,13 +187,34 @@ object CargaAcademica {
 
 /** MODELOS DE DATOS */
 data class Materia(val nombre: String, val profesor: String, val parciales: List<String>, val promedio: String)
-data class ClaseHorario(val dia: String, val hora: String, val materia: String, val seccion: String, val aula: String)
+data class ClaseHorario(val dia: String, val hora: String, val materia: String, val seccion: String, val aula: String, val hayEmpalme: Boolean = false)
 data class AvanceItem(val clave: String, val materia: String, val profesorNombre: String, val porcentaje: String, val idHorario: String, val idProfesor: String)
 data class TemaReportado(val fecha: String, val tema: String, val subtema: String)
 data class ResultadoTemas(val lista: List<TemaReportado>, val log: String)
 data class AsistenciaProfesor(val profesor: String, val materia: String, val porcentaje: String, val seccion: String, val aula: String, val estatus: String)
 
+/** MODELOS PARA FEEDBACK SYSTEM */
+@Keep
+data class Sugerencia(
+    val id: String = "",
+    val autor: String = "",
+    val titulo: String = "",
+    val contenido: String = "",
+    val fecha: String = "",
+    val tipo: String = "Sugerencia",
+    val respuestas: Map<String, Respuesta> = emptyMap()
+)
+
+@Keep
+data class Respuesta(
+    val id: String = "",
+    val autor: String = "",
+    val contenido: String = "",
+    val fecha: String = ""
+)
+
 /** MODELO PARA FIREBASE CON CLASIFICACION */
+@Keep
 data class NotaComunidad(
     val id: String = "",
     val titulo: String = "",
@@ -190,6 +225,13 @@ data class NotaComunidad(
     val anio: String = "",
     val materia: String = ""
 )
+
+/** HELPER NORMALIZACION (BUSQUEDA ACCESIBLE) */
+fun normalizeText(input: String): String {
+    val nfd = java.text.Normalizer.normalize(input, java.text.Normalizer.Form.NFD)
+    val pattern = java.util.regex.Pattern.compile("\\p{InCombiningDiacriticalMarks}+")
+    return pattern.matcher(nfd).replaceAll("").lowercase().replace(Regex("[^a-z0-9 ]"), "") // Mantiene solo alfanum y espacios
+}
 
 /** MOTOR TERMODINAMICO IAPWS-97 */
 object ThermoEngine {
@@ -295,7 +337,9 @@ class FimRepository {
 
     /** FIREBASE INSTANCIAS */
     private val auth = FirebaseAuth.getInstance()
-    private val db = FirebaseDatabase.getInstance().getReference("notas_comunidad")
+    private val dbRoot = FirebaseDatabase.getInstance().reference
+    private val db = dbRoot.child("notas_comunidad")
+    private val dbSugerencias = dbRoot.child("sugerencias")
 
     /** FUNCION LOGIN COMBINADO */
     suspend fun login(matricula: String, pass: String): String {
@@ -313,8 +357,12 @@ class FimRepository {
                     .execute()
 
                 _cookiesSesion.putAll(response.cookies())
-                if (response.url().toString().contains("login.php")) {
-                    if (response.body().contains("incorrect")) return@withContext "Credenciales incorrectas"
+                val body = response.body()
+                // Strict check: If URL is login.php OR body contains login form elements, it failed.
+                if (response.url().toString().contains("login.php") ||
+                    body.contains("clave_u") ||
+                    body.contains("Recuperar clave")) {
+                    return@withContext "Credenciales incorrectas o error en el portal"
                 }
                 if (_cookiesSesion.isEmpty()) return@withContext "Error: No se recibieron cookies"
 
@@ -378,6 +426,40 @@ class FimRepository {
             override fun onCancelled(error: DatabaseError) {
                 Log.e("FIREBASE", "Error leyendo notas: ${error.message}")
             }
+        })
+    }
+
+    fun enviarSugerencia(titulo: String, contenido: String, tipo: String, matricula: String, onResult: (Boolean) -> Unit) {
+        if (auth.currentUser == null) {
+             onResult(false)
+             return
+        }
+        val id = dbSugerencias.push().key ?: run { onResult(false); return }
+        val fecha = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+        val sugerencia = Sugerencia(id, matricula, titulo, contenido, fecha, tipo)
+        dbSugerencias.child(id).setValue(sugerencia)
+            .addOnSuccessListener { onResult(true) }
+            .addOnFailureListener { onResult(false) }
+    }
+
+    fun enviarRespuesta(idSugerencia: String, contenido: String, autor: String) {
+        val idRespuesta = dbSugerencias.child(idSugerencia).child("respuestas").push().key ?: return
+        val fecha = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+        val respuesta = Respuesta(idRespuesta, autor, contenido, fecha)
+        dbSugerencias.child(idSugerencia).child("respuestas").child(idRespuesta).setValue(respuesta)
+    }
+
+    fun escucharSugerencias(onDataChange: (List<Sugerencia>) -> Unit) {
+        dbSugerencias.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val lista = mutableListOf<Sugerencia>()
+                for (child in snapshot.children) {
+                    val sug = child.getValue(Sugerencia::class.java)
+                    if (sug != null) lista.add(sug)
+                }
+                onDataChange(lista.reversed())
+            }
+            override fun onCancelled(error: DatabaseError) {}
         })
     }
 
@@ -540,14 +622,71 @@ class FimRepository {
                     if (celdas.isNotEmpty()) {
                         val horaRaw = celdas[0].text().replace(" ", "")
                         for (i in 1 until celdas.size) {
-                            val rawHtml = celdas[i].html()
-                            val partes = rawHtml.split("<br>", "<br/>").map { Jsoup.parse(it).text().trim() }.filter { it.isNotEmpty() }
+                            val celda = celdas[i]
+                            val rawHtml = celda.html()
+                            
+                            // 1. Detectar empalme: Revisar estilo directo en TD o hijos
+                            val style = celda.attr("style")
+                            val tieneEmpalme = style.contains("#f00", ignoreCase = true) || 
+                                               style.contains("red", ignoreCase = true) ||
+                                               celda.select("font[color=red], span[style*=red]").isNotEmpty()
+                            
+                            // 2. Limpieza y Parsing
+                            // La pagina a veces pega el nombre de la siguiente materia al final del aula de la anterior
+                            // Ej: "Aula W-30Máquinas..." -> Falta <br> o espacio
+                            // Reemplazamos <br> por saltos de linea para procesar texto
+                            var partes = rawHtml.split(Regex("<br\\s*/?>")).map { Jsoup.parse(it).text().trim() }.filter { it.isNotEmpty() }.toMutableList()
+                            
+                            // Si hay empalme y partes insuficientes o raramente formateadas, intentamos separar lineas pegadas
+                             if (partes.size > 0) {
+                                val fixedPartes = mutableListOf<String>()
+                                for (p in partes) {
+                                    // Hack heurístico: Si una linea empieza con "Edif." (Aula) y tiene una mayúscula pegada a un número/letra al final...
+                                    // Ej: ...Aula W-30Mecánica
+                                    // Regex busca minúscula/número seguida de Mayúscula sin espacio
+                                    if (p.startsWith("Edif") || p.contains("Aula", ignoreCase = true)) {
+                                         // Intentar separar "Aula <codigo><NombreMateria>"
+                                         // Buscamos transicion de (digito|letra min)(Letra Mayuscula)
+                                         // Ojo: "Secc. A" es valido. "W-30Mecánica" NO es valido.
+                                         val match = Regex("(?<=[0-9a-z])(?=[A-ZÁÉÍÓÚÑ])").find(p) 
+                                         // Excluir casos comunes si los hay.
+                                         // Si encontraste un split hacia el final de la cadena (asumiendo nombre de materia largo)
+                                         if (match != null && match.range.first > 10) { // 10 chars minimo de "Edif... "
+                                             val splitIdx = match.range.first
+                                             // Verificamos que no sea solo una sigla de aula
+                                              val firstPart = p.substring(0, splitIdx)
+                                              val secondPart = p.substring(splitIdx)
+                                              // Si la segunda parte parece un nombre de materia (Longitud > 3)
+                                              if (secondPart.length > 3) {
+                                                  fixedPartes.add(firstPart)
+                                                  fixedPartes.add(secondPart)
+                                                  continue
+                                              }
+                                         }
+                                    }
+                                    fixedPartes.add(p)
+                                }
+                                partes = fixedPartes
+                            }
+
+
                             if (partes.isNotEmpty()) {
                                 val diaNombre = diasSemana.getOrElse(i) { "Día $i" }
-                                val materia = partes.getOrElse(0) { "Clase" }
-                                val seccion = partes.getOrElse(1) { "" }
-                                val aula = partes.getOrElse(2) { "" }
-                                lista.add(ClaseHorario(diaNombre, horaRaw, materia, seccion, aula))
+                                var idx = 0
+                                while (idx < partes.size) {
+                                    val materia = partes[idx]
+                                    val seccion = if (idx + 1 < partes.size) partes[idx + 1] else ""
+                                    // Si la seccion es muy larga, probablemente sea otra cosa o el orden cambio.
+                                    // Asumimos bloque de 3 siempre que sea posible.
+                                    
+                                    val aula = if (idx + 2 < partes.size) partes[idx + 2] else ""
+                                    
+                                    // Si detectamos que "aula" es en realidad una sección (ej. formato corto), ajustamos?
+                                    // Por ahora confiamos en el bloque de 3.
+                                    
+                                    lista.add(ClaseHorario(diaNombre, horaRaw, materia, seccion, aula, tieneEmpalme))
+                                    idx += 3
+                                }
                             }
                         }
                     }
@@ -615,6 +754,44 @@ class FimRepository {
             return@withContext lista
         }
     }
+
+    suspend fun obtenerNombreAlumno(): String {
+        return withContext(Dispatchers.IO) {
+            if (_cookiesSesion.isEmpty()) return@withContext ""
+            try {
+                val url = "https://fim.umich.mx/escolar/alumno/misdatos.php"
+                val response = Jsoup.connect(url)
+                    .cookies(_cookiesSesion)
+                    .userAgent(USER_AGENT)
+                    .timeout(20000)
+                    .execute()
+                val doc = response.parse()
+                
+                var nombres = ""
+                var paterno = ""
+                var materno = ""
+
+                val rows = doc.select("div.row")
+                for (row in rows) {
+                    val label = row.select("label").text().lowercase()
+                    val valor = row.select("p.lead").first()?.text()?.trim() ?: ""
+                    
+                    if (valor.isNotEmpty()) {
+                        when {
+                            label.contains("nombres") -> nombres = valor
+                            label.contains("paterno") -> paterno = valor
+                            label.contains("materno") -> materno = valor
+                        }
+                    }
+                }
+                
+                return@withContext listOf(nombres, paterno, materno).filter { it.isNotEmpty() }.joinToString(" ")
+            } catch (e: Exception) {
+                Log.e("FIM", "Error Nombre: ${e.message}")
+                return@withContext ""
+            }
+        }
+    }
 }
 
 /** VIEWMODEL PRINCIPAL */
@@ -637,9 +814,13 @@ class FimViewModel(application: Application) : AndroidViewModel(application) {
 
     /** ESTADO PARA NOTAS DE COMUNIDAD */
     var notasComunidad = mutableStateListOf<NotaComunidad>()
-    var notasNavegacionNivel by mutableStateOf(0)
+    var notasNavegacionNivel by mutableIntStateOf(0)
     var anioSeleccionado by mutableStateOf("")
     var materiaSeleccionadaNotas by mutableStateOf("")
+
+    /** ESTADO PARA FEEDBACK SYSTEM */
+    var sugerencias = mutableStateListOf<Sugerencia>()
+    var sugerenciaSeleccionada by mutableStateOf<Sugerencia?>(null)
 
     var materiaSeleccionadaNombre by mutableStateOf("")
     var debugLog by mutableStateOf("")
@@ -650,6 +831,8 @@ class FimViewModel(application: Application) : AndroidViewModel(application) {
     var horario = mutableStateListOf<ClaseHorario>()
     var diaSeleccionado by mutableStateOf(obtenerDiaHoy())
     var credencialBitmap by mutableStateOf<Bitmap?>(null)
+    
+    var nombreAlumno by mutableStateOf("")
 
     init {
         val savedMat = prefs.getString("matricula", null)
@@ -660,6 +843,35 @@ class FimViewModel(application: Application) : AndroidViewModel(application) {
             rememberMe = true
             doLogin(auto = true)
         }
+    }
+    
+    fun cargarSugerencias() {
+         repo.escucharSugerencias { lista ->
+             sugerencias.clear()
+             sugerencias.addAll(lista)
+         }
+    }
+
+    fun enviarSugerencia(titulo: String, contenido: String, tipo: String, onResult: (Boolean) -> Unit) {
+        val matricula = prefs.getString("matricula", "Anónimo") ?: "Anónimo"
+        repo.enviarSugerencia(titulo, contenido, tipo, matricula, onResult)
+    }
+    
+    fun enviarRespuesta(contenido: String) {
+        sugerenciaSeleccionada?.let {
+            val autor = nombreAlumno.ifEmpty { prefs.getString("matricula", "Anónimo") ?: "Anónimo" }
+            repo.enviarRespuesta(it.id, contenido, autor)
+        }
+    }
+    
+    fun seleccionarSugerencia(sugerencia: Sugerencia) {
+        sugerenciaSeleccionada = sugerencia
+        pantallaActual = Pantalla.DETALLE_SUGERENCIA
+    }
+    
+    fun cerrarDetalleSugerencia() {
+        sugerenciaSeleccionada = null
+        pantallaActual = Pantalla.SUGERENCIAS
     }
 
     private fun obtenerDiaHoy(): String {
@@ -697,10 +909,17 @@ class FimViewModel(application: Application) : AndroidViewModel(application) {
             if(!auto) delay(500)
             val resultado = repo.login(matricula, password)
             if (resultado == "OK") {
+                // Cargar nombre del alumno en segundo plano
+                launch {
+                    val nombre = repo.obtenerNombreAlumno()
+                    if (nombre.isNotEmpty()) nombreAlumno = nombre
+                }
+                
                 repo.escucharNotasComunidad { notas ->
                     notasComunidad.clear()
                     notasComunidad.addAll(notas)
                 }
+                cargarSugerencias()
                 pantallaActual = Pantalla.MENU
             } else {
                 if (!auto) errorMsg = resultado
@@ -714,6 +933,7 @@ class FimViewModel(application: Application) : AndroidViewModel(application) {
     fun irAAvance() { pantallaActual = Pantalla.AVANCE; cargarAvance() }
     fun irAAsistencia() { pantallaActual = Pantalla.ASISTENCIA_PROFESORES; cargarAsistencia() }
     fun irACalculadoraTermo() { pantallaActual = Pantalla.CALCULADORA_TERMO }
+    fun irASugerencias() { pantallaActual = Pantalla.SUGERENCIAS }
 
     fun irANotasComunidad() {
         pantallaActual = Pantalla.NOTAS_COMUNIDAD
@@ -906,10 +1126,25 @@ fun AppContent() {
     })
 
     MaterialTheme(
-        colorScheme = darkColorScheme(primary = FimGold, onPrimary = Color.Black, background = FimDark, surface = FimSurface, onSurface = Color.White, surfaceVariant = FimSurfaceVariant, error = FimRed)
+        colorScheme = darkColorScheme(
+            primary = FimGold,
+            onPrimary = Color.Black,
+            background = FimBackground,
+            surface = FimSurface,
+            onSurface = Color.White,
+            surfaceVariant = FimSurfaceVariant,
+            error = FimRed
+        )
     ) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Crossfade(targetState = vm.pantallaActual, label = "Transition", animationSpec = tween(400)) { screen ->
+            AnimatedContent(
+                targetState = vm.pantallaActual,
+                label = "ScreenTransition",
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(300)) + slideInVertically(animationSpec = tween(300)) { height -> height / 10 } togetherWith
+                            fadeOut(animationSpec = tween(300))
+                }
+            ) { screen ->
                 when (screen) {
                     Pantalla.LOGIN -> PantallaLogin(vm)
                     Pantalla.MENU -> PantallaMenu(vm)
@@ -922,6 +1157,8 @@ fun AppContent() {
                     Pantalla.CALCULADORA_TERMO -> PantallaCalculadoraTermo(vm)
                     Pantalla.ASISTENCIA_PROFESORES -> PantallaAsistencia(vm)
                     Pantalla.NOTAS_COMUNIDAD -> PantallaNotasComunidad(vm)
+                    Pantalla.SUGERENCIAS -> PantallaSugerencias(vm)
+                    Pantalla.DETALLE_SUGERENCIA -> PantallaDetalleSugerencia(vm)
                 }
             }
         }
@@ -960,6 +1197,10 @@ fun PantallaMenu(vm: FimViewModel) {
     Column(modifier = Modifier.fillMaxSize().background(FimDark).padding(20.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(modifier = Modifier.height(20.dp))
         Text("Bienvenido", style = MaterialTheme.typography.headlineMedium, color = FimGold)
+        if (vm.nombreAlumno.isNotEmpty()) {
+            Text(vm.nombreAlumno, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Spacer(modifier = Modifier.height(4.dp))
+        }
         Text("Selecciona una opción", color = Color.Gray)
         Spacer(modifier = Modifier.height(30.dp))
 
@@ -988,6 +1229,16 @@ fun PantallaMenu(vm: FimViewModel) {
         Spacer(modifier = Modifier.weight(1f))
         Spacer(modifier = Modifier.height(20.dp))
         OutlinedButton(onClick = { vm.cerrarSesion() }, border = BorderStroke(1.dp, FimRed), colors = ButtonDefaults.outlinedButtonColors(contentColor = FimRed), modifier = Modifier.fillMaxWidth()) { Icon(Icons.AutoMirrored.Filled.ExitToApp, null); Spacer(modifier = Modifier.width(8.dp)); Text("Cerrar Sesión") }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "Enviar sugerencias o errores",
+            color = Color.Gray,
+            fontSize = 12.sp,
+            textDecoration = TextDecoration.Underline,
+            modifier = Modifier.clickable { vm.irASugerencias() }
+        )
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
@@ -1009,23 +1260,55 @@ fun AnimatableMenuItem(index: Int, content: @Composable () -> Unit) {
 @Composable
 fun PantallaAsistencia(vm: FimViewModel) {
     BackHandler { vm.volverAlMenu() }
+    var searchQuery by remember { mutableStateOf("") }
+
     Scaffold(
         topBar = { TopBarPersonalizada(titulo = "Asistencia de Profesores", onBack = { vm.volverAlMenu() }, onRefresh = { vm.cargarAsistencia() }) },
         containerColor = FimDark
     ) { padding ->
-        if (vm.isLoading) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = FimTeal) }
-        } else {
-            if (vm.asistenciaProfesores.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text("No hay datos de asistencia", color = Color.Gray) }
+        Column(modifier = Modifier.padding(padding)) {
+            // Search Bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("Buscar profesor") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = FimGold) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = FimGold,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = FimGold,
+                    cursorColor = FimGold
+                ),
+                singleLine = true
+            )
+
+            if (vm.isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = FimTeal) }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(padding),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    itemsIndexed(vm.asistenciaProfesores) { index, item ->
-                        AsistenciaCard(item)
+                if (vm.asistenciaProfesores.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No hay datos de asistencia", color = Color.Gray) }
+                } else {
+                    val filteredList = vm.asistenciaProfesores.filter {
+                        normalizeText(it.profesor).contains(normalizeText(searchQuery)) ||
+                                normalizeText(it.materia).contains(normalizeText(searchQuery))
+                    }
+
+                    if (filteredList.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No se encontraron coincidencias", color = Color.Gray) }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize().weight(1f),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            itemsIndexed(filteredList) { index, item ->
+                                AsistenciaCard(item)
+                            }
+                        }
                     }
                 }
             }
@@ -1270,12 +1553,40 @@ fun PantallaCredencial(vm: FimViewModel) {
 @Composable
 fun PantallaNotas(vm: FimViewModel, titulo: String, listaMaterias: List<Materia>, onRefresh: () -> Unit) {
     BackHandler { vm.volverAlMenu() }
+    var searchQuery by remember { mutableStateOf("") }
+
     Scaffold(topBar = { TopBarPersonalizada(titulo = titulo, onBack = { vm.volverAlMenu() }, onRefresh = onRefresh) }, containerColor = FimDark) { padding ->
-        if (vm.isLoading) { Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = FimGold) } } else {
-            if (listaMaterias.isEmpty()) { Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text("No hay datos disponibles", color = Color.Gray) } } else {
-                LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    itemsIndexed(listaMaterias) { index, materia ->
-                        if (materia.nombre == "SIN DATOS" || materia.nombre == "ERROR") ErrorCard(materia) else MateriaCard(materia)
+        Column(modifier = Modifier.padding(padding)) {
+            // Search Bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("Buscar materia") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = FimGold) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = FimGold,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = FimGold,
+                    cursorColor = FimGold
+                ),
+                singleLine = true
+            )
+
+            if (vm.isLoading) { Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = FimGold) } } else {
+                val filteredList = listaMaterias.filter { 
+                    normalizeText(it.nombre).contains(normalizeText(searchQuery)) || 
+                    normalizeText(it.profesor).contains(normalizeText(searchQuery)) 
+                }
+                
+                if (filteredList.isEmpty()) { Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { Text("No hay datos disponibles", color = Color.Gray) } } else {
+                    LazyColumn(modifier = Modifier.fillMaxSize().weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        itemsIndexed(filteredList) { index, materia ->
+                            if (materia.nombre == "SIN DATOS" || materia.nombre == "ERROR") ErrorCard(materia) else MateriaCard(materia)
+                        }
                     }
                 }
             }
@@ -1293,6 +1604,7 @@ fun ErrorCard(materia: Materia) {
 @Composable
 fun MateriaCard(materia: Materia) {
     val promNum = materia.promedio.replace(Regex("[^0-9.]"), "").toFloatOrNull() ?: 0f
+    val nombreLimpio = materia.nombre.replace(Regex("\\[.*?\\]"), "").trim()
 
     val statusColor = when {
         materia.promedio == "--" -> Color.Gray
@@ -1303,7 +1615,7 @@ fun MateriaCard(materia: Materia) {
 
     ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = FimSurfaceVariant), elevation = CardDefaults.cardElevation(4.dp), shape = RoundedCornerShape(12.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) { Box(modifier = Modifier.width(4.dp).height(40.dp).background(statusColor, CircleShape)); Spacer(modifier = Modifier.width(12.dp)); Column(modifier = Modifier.weight(1f)) { Text(materia.nombre, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White); Text(materia.profesor, style = MaterialTheme.typography.bodySmall, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
+            Row(verticalAlignment = Alignment.CenterVertically) { Box(modifier = Modifier.width(4.dp).height(40.dp).background(statusColor, CircleShape)); Spacer(modifier = Modifier.width(12.dp)); Column(modifier = Modifier.weight(1f)) { Text(nombreLimpio, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White); Text(materia.profesor, style = MaterialTheme.typography.bodySmall, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Color.White.copy(alpha = 0.1f))
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { materia.parciales.forEachIndexed { i, nota -> CajaCalif("P${i + 1}", nota) } }; Spacer(modifier = Modifier.weight(1f)); CajaCalif("Prom", materia.promedio, isPromedio = true) }
         }
@@ -1317,7 +1629,31 @@ fun PantallaHorario(vm: FimViewModel) {
     val clasesDelDia = vm.horario.filter { it.dia == vm.diaSeleccionado }.sortedBy { it.hora }
     Scaffold(topBar = { TopBarPersonalizada(titulo = "Mi Horario", onBack = { vm.volverAlMenu() }, onRefresh = { vm.cargarHorario() }) }, containerColor = FimDark) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) { dias.forEach { dia -> val seleccionado = vm.diaSeleccionado == dia; val colorFondo = if (seleccionado) FimGold else Color.Transparent; val colorTexto = if (seleccionado) Color.Black else Color.Gray; Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(colorFondo).clickable { vm.diaSeleccionado = dia }.padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.Center) { Text(text = dia.take(3).uppercase(), color = colorTexto, fontWeight = FontWeight.Bold, fontSize = 13.sp) } } }
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                dias.forEach { dia ->
+                    val seleccionado = vm.diaSeleccionado == dia
+                    val conflictivo = vm.horario.any { it.dia == dia && it.hayEmpalme }
+                    val colorFondo = if (seleccionado) FimGold else Color.Transparent
+                    val colorTexto = if (seleccionado) Color.Black else Color.Gray
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(colorFondo)
+                            .clickable { vm.diaSeleccionado = dia }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (conflictivo) {
+                                Icon(Icons.Filled.Warning, contentDescription = "Conflicto", tint = FimRed, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+                            Text(text = dia.take(3).uppercase(), color = colorTexto, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
             HorizontalDivider(color = FimSurfaceVariant)
             if (vm.isLoading) { Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = FimGold) } } else {
                 if (clasesDelDia.isEmpty()) { Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Filled.DateRange, null, tint = FimSurfaceVariant, modifier = Modifier.size(64.dp)); Spacer(modifier = Modifier.height(16.dp)); Text("Día libre", style = MaterialTheme.typography.titleLarge, color = Color.Gray) } } } else {
@@ -1342,12 +1678,17 @@ fun obtenerDiaHoy(vm: FimViewModel): String {
 @Composable
 fun HorarioCard(clase: ClaseHorario, esActual: Boolean) {
     val containerColor = if (esActual) FimGold.copy(alpha = 0.15f) else FimSurfaceVariant
-    val borderColor = if (esActual) FimGold else Color.Transparent
-    ElevatedCard(modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, borderColor), shape = RoundedCornerShape(12.dp)), colors = CardDefaults.elevatedCardColors(containerColor = containerColor), shape = RoundedCornerShape(12.dp)) {
+    val borderColor = if (clase.hayEmpalme) FimRed else if (esActual) FimGold else Color.Transparent
+    
+    ElevatedCard(modifier = Modifier.fillMaxWidth().border(BorderStroke(if (clase.hayEmpalme) 2.dp else 1.dp, borderColor), shape = RoundedCornerShape(12.dp)), colors = CardDefaults.elevatedCardColors(containerColor = containerColor), shape = RoundedCornerShape(12.dp)) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) { val horas = clase.hora.split("-"); Text(horas.getOrElse(0){""}.trim(), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = if(esActual) FimGold else Color.White); Text(horas.getOrElse(1){""}.trim(), fontSize = 12.sp, color = Color.Gray) }
             Spacer(modifier = Modifier.width(16.dp)); Box(modifier = Modifier.width(1.dp).height(40.dp).background(Color.Gray.copy(alpha = 0.3f))); Spacer(modifier = Modifier.width(16.dp))
-            Column { if (esActual) Text("AHORA", color = FimGold, fontWeight = FontWeight.Bold, fontSize = 10.sp); Text(clase.materia, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color.White); Spacer(modifier = Modifier.height(4.dp)); Row(verticalAlignment = Alignment.CenterVertically) { Text("${clase.aula} • ${clase.seccion}", style = MaterialTheme.typography.bodySmall, color = Color.Gray) } }
+            Column { 
+                if (clase.hayEmpalme) Text("⚠ EMPALME DETECTADO", color = FimRed, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                if (esActual) Text("AHORA", color = FimGold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                Text(clase.materia, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color.White); Spacer(modifier = Modifier.height(4.dp)); Row(verticalAlignment = Alignment.CenterVertically) { Text("${clase.aula} • ${clase.seccion}", style = MaterialTheme.typography.bodySmall, color = Color.Gray) } 
+            }
         }
     }
 }
@@ -1572,8 +1913,8 @@ fun PantallaNotasComunidad(vm: FimViewModel) {
 fun VistaSeleccionAnio(vm: FimViewModel) {
     val anios = CargaAcademica.aniosOrdenados
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        items(anios) { anio ->
-            val icon = when (anio) {
+        itemsIndexed(anios) { index, anio ->
+             val icon = when (anio) {
                 "Primer Año" -> Icons.Filled.LooksOne
                 "Segundo Año" -> Icons.Filled.LooksTwo
                 "Tercer Año" -> Icons.Filled.Looks3
@@ -1600,22 +1941,44 @@ fun VistaSeleccionAnio(vm: FimViewModel) {
 @Composable
 fun VistaSeleccionMateria(vm: FimViewModel) {
     val materias = CargaAcademica.mapa[vm.anioSeleccionado] ?: emptyList()
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(materias) { materia ->
-            val nuevas = vm.contarNuevas(vm.anioSeleccionado, materia)
+    var searchQuery by remember { mutableStateOf("") }
+    
+    Column {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Filtrar materias") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = FimGold) },
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = FimGold,
+                unfocusedBorderColor = Color.Gray,
+                focusedLabelColor = FimGold,
+                cursorColor = FimGold
+            ),
+            singleLine = true
+        )
 
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable { vm.seleccionarMateriaNotas(materia) },
-                colors = CardDefaults.cardColors(containerColor = FimSurfaceVariant)
-            ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Book, null, tint = FimGold)
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text(materia, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        val filteredMaterias = materias.filter { normalizeText(it).contains(normalizeText(searchQuery)) }
 
-                    if (nuevas > 0) {
-                        Box(modifier = Modifier.background(FimRed, RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                            Text("+$nuevas", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            itemsIndexed(filteredMaterias) { index, materia ->
+                val nuevas = vm.contarNuevas(vm.anioSeleccionado, materia)
+
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { vm.seleccionarMateriaNotas(materia) },
+                    colors = CardDefaults.cardColors(containerColor = FimSurfaceVariant)
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Book, null, tint = FimGold)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(materia, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+
+                        if (nuevas > 0) {
+                            Box(modifier = Modifier.background(FimRed, RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                Text("+$nuevas", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
                         }
                     }
                 }
@@ -1626,22 +1989,44 @@ fun VistaSeleccionMateria(vm: FimViewModel) {
 
 @Composable
 fun VistaListaNotas(vm: FimViewModel) {
+    var searchQuery by remember { mutableStateOf("") }
+    
     val notasFiltradas = vm.notasComunidad.filter {
-        it.anio == vm.anioSeleccionado && it.materia == vm.materiaSeleccionadaNotas
+        it.anio == vm.anioSeleccionado && 
+        it.materia == vm.materiaSeleccionadaNotas &&
+        (normalizeText(it.titulo).contains(normalizeText(searchQuery)) || normalizeText(it.descripcion).contains(normalizeText(searchQuery)))
     }
 
-    if (notasFiltradas.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Filled.Book, null, tint = Color.Gray, modifier = Modifier.size(64.dp))
-                Text("No hay recursos aquí aún", color = Color.Gray)
-                Text("¡Sé el primero en aportar!", color = FimPurple)
+    Column {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Buscar en notas") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = FimGold) },
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = FimGold,
+                unfocusedBorderColor = Color.Gray,
+                focusedLabelColor = FimGold,
+                cursorColor = FimGold
+            ),
+            singleLine = true
+        )
+
+        if (notasFiltradas.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.Book, null, tint = Color.Gray, modifier = Modifier.size(64.dp))
+                    Text("No hay resultados", color = Color.Gray)
+                    if (searchQuery.isBlank()) Text("¡Sé el primero en aportar!", color = FimPurple)
+                }
             }
-        }
-    } else {
-        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(notasFiltradas) { nota ->
-                CardNotaComunidad(nota)
+        } else {
+            LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(notasFiltradas) { nota ->
+                    CardNotaComunidad(nota)
+                }
             }
         }
     }
@@ -1771,4 +2156,220 @@ fun DialogoAgregarNota(onDismiss: () -> Unit, onConfirm: (String, String, String
         },
         containerColor = FimSurface
     )
+}
+
+/** PANTALLA SUGERENCIAS */
+@Composable
+fun PantallaSugerencias(vm: FimViewModel) {
+    BackHandler { vm.volverAlMenu() }
+    var mostrarDialogo by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(Unit) {
+        vm.cargarSugerencias()
+    }
+
+    Scaffold(
+        topBar = { TopBarPersonalizada("Sugerencias y Errores", { vm.volverAlMenu() }, { vm.cargarSugerencias() }) },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { mostrarDialogo = true }, containerColor = FimGold) {
+                Icon(Icons.Filled.Add, "Agregar", tint = Color.Black)
+            }
+        },
+        containerColor = FimDark
+    ) { padding ->
+        if (vm.sugerencias.isEmpty()) {
+            Box(modifier = Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.BugReport, null, tint = Color.Gray, modifier = Modifier.size(64.dp))
+                    Text("No hay reportes aún", color = Color.Gray)
+                }
+            }
+        } else {
+            LazyColumn(modifier = Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(vm.sugerencias) { sug ->
+                    CardSugerencia(sug) { vm.seleccionarSugerencia(sug) }
+                }
+            }
+        }
+    }
+
+    if (mostrarDialogo) {
+        DialogoNuevaSugerencia(onDismiss = { mostrarDialogo = false }) { titulo, contenido, tipo ->
+            vm.enviarSugerencia(titulo, contenido, tipo) { exito ->
+                if (exito) mostrarDialogo = false
+            }
+        }
+    }
+}
+
+@Composable
+fun CardSugerencia(sug: Sugerencia, onClick: () -> Unit) {
+    val icon = if (sug.tipo == "Error") Icons.Filled.BugReport else Icons.Filled.Lightbulb
+    val colorIcon = if (sug.tipo == "Error") FimRed else FimGold
+    val respuestasCount = sug.respuestas.size
+
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = FimSurfaceVariant),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = colorIcon)
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(sug.titulo, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(sug.contenido, style = MaterialTheme.typography.bodySmall, color = Color.Gray, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row {
+                   Text(sug.fecha, style = MaterialTheme.typography.labelSmall, color = Color.DarkGray)
+                   if (respuestasCount > 0) {
+                       Spacer(modifier = Modifier.width(8.dp))
+                       Text("$respuestasCount respuestas", style = MaterialTheme.typography.labelSmall, color = FimBlue)
+                   }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DialogoNuevaSugerencia(onDismiss: () -> Unit, onConfirm: (String, String, String) -> Unit) {
+    var titulo by remember { mutableStateOf("") }
+    var contenido by remember { mutableStateOf("") }
+    var tipo by remember { mutableStateOf("Sugerencia") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nuevo Reporte") },
+        text = {
+            Column {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    FilterChip(selected = tipo == "Sugerencia", onClick = { tipo = "Sugerencia" }, label = { Text("Sugerencia") })
+                    FilterChip(selected = tipo == "Error", onClick = { tipo = "Error" }, label = { Text("Bug / Error") })
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(value = titulo, onValueChange = { titulo = it }, label = { Text("Título") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(value = contenido, onValueChange = { contenido = it }, label = { Text("Descripción") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
+            }
+        },
+        confirmButton = {
+            Button(onClick = { if (titulo.isNotBlank() && contenido.isNotBlank()) onConfirm(titulo, contenido, tipo) }) {
+                Text("Enviar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
+fun PantallaDetalleSugerencia(vm: FimViewModel) {
+    BackHandler { vm.cerrarDetalleSugerencia() }
+    val sugId = vm.sugerenciaSeleccionada?.id ?: return
+    val sug = vm.sugerencias.find { it.id == sugId } ?: return
+
+    var respuestaInput by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+
+    val respuestasOrdenadas = remember(sug.respuestas) {
+        sug.respuestas.values.sortedByDescending { it.id } 
+    }
+
+    Scaffold(
+        topBar = { TopBarPersonalizada("Detalle del Reporte", { vm.cerrarDetalleSugerencia() }, { vm.cargarSugerencias() }) },
+        containerColor = FimDark,
+        contentWindowInsets = WindowInsets.safeDrawing, // Manejo safe area
+        bottomBar = {
+            // Input Bar con manejo de IME
+            Surface(
+                color = FimSurfaceVariant, 
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding() // Padding automatico teclado
+            ) {
+                Row(
+                    modifier = Modifier.padding(8.dp), 
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = respuestaInput, 
+                        onValueChange = { respuestaInput = it }, 
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp),
+                        placeholder = { Text("Escribir respuesta...") },
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = FimDark, 
+                            unfocusedContainerColor = FimDark,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                    IconButton(
+                        onClick = { 
+                            if (respuestaInput.isNotBlank()) {
+                                vm.enviarRespuesta(respuestaInput)
+                                respuestaInput = ""
+                                // Ocultar teclado tras enviar (opcional, mejor dejarlo abierto para chatear)
+                            }
+                        },
+                        colors = IconButtonDefaults.iconButtonColors(contentColor = FimGold)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, null)
+                    }
+                }
+            }
+        }
+    ) { padding ->
+        LazyColumn(
+            state = listState, 
+            modifier = Modifier.padding(padding).fillMaxSize(), 
+            contentPadding = PaddingValues(16.dp),
+            reverseLayout = true 
+        ) {
+            items(respuestasOrdenadas) { resp ->
+                CardRespuesta(resp)
+            }
+            
+            item {
+                Column {
+                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Color.Gray.copy(0.2f))
+                     Text("Comentarios", style = MaterialTheme.typography.titleMedium, color = FimBlue)
+                     Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+            
+            item {
+                Column(modifier = Modifier.fillMaxWidth().background(FimSurfaceVariant, RoundedCornerShape(12.dp)).padding(16.dp)) {
+                     Row(verticalAlignment = Alignment.CenterVertically) {
+                         Icon(if(sug.tipo == "Error") Icons.Filled.BugReport else Icons.Filled.Lightbulb, null, tint = if(sug.tipo == "Error") FimRed else FimGold)
+                         Spacer(modifier = Modifier.width(8.dp))
+                         Text(sug.titulo, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                     }
+                     Spacer(modifier = Modifier.height(8.dp))
+                     Text(sug.contenido, style = MaterialTheme.typography.bodyMedium, color = Color.LightGray)
+                     Spacer(modifier = Modifier.height(12.dp))
+                     Text("Por: ${sug.autor} • ${sug.fecha}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CardRespuesta(resp: Respuesta) {
+    Row(modifier = Modifier.padding(vertical = 8.dp)) {
+        Box(modifier = Modifier.size(32.dp).clip(CircleShape).background(Color.Gray.copy(0.3f)), contentAlignment = Alignment.Center) {
+             Text(resp.autor.take(1), color = Color.White, fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(modifier = Modifier.background(FimSurfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(0.dp, 12.dp, 12.dp, 12.dp)).padding(12.dp)) {
+            Text(resp.autor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = FimGold)
+            Text(resp.contenido, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            Text(resp.fecha, style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.align(Alignment.End))
+        }
+    }
 }
