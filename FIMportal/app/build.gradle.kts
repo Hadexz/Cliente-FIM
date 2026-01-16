@@ -14,8 +14,8 @@ android {
         applicationId = "com.alex.fimportal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.8.2"
+        versionCode = 4
+        versionName = "0.8.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
